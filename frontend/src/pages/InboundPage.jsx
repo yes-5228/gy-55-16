@@ -50,6 +50,7 @@ export default function InboundPage() {
   const [submittingReserve, setSubmittingReserve] = useState(false);
   const [submittingInbound, setSubmittingInbound] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [prevInboundSize, setPrevInboundSize] = useState("medium");
 
   const messageAnchorRef = useRef(null);
 
@@ -114,7 +115,12 @@ export default function InboundPage() {
   }, [inboundForm.size, tab, inboundForm.reservation_id]);
 
   const updateInbound = (event) => {
-    setInboundForm({ ...inboundForm, [event.target.name]: event.target.value });
+    const name = event.target.name;
+    const value = event.target.value;
+    if (name === "reservation_id" && value && !inboundForm.reservation_id) {
+      setPrevInboundSize(inboundForm.size);
+    }
+    setInboundForm({ ...inboundForm, [name]: value });
   };
 
   const updateReservation = (event) => {
@@ -191,6 +197,7 @@ export default function InboundPage() {
   };
 
   const useReservation = (r) => {
+    setPrevInboundSize(inboundForm.size);
     setInboundForm({
       ...inboundForm,
       reservation_id: String(r.id),
@@ -225,7 +232,7 @@ export default function InboundPage() {
   };
 
   const clearReservationSelection = () => {
-    setInboundForm({ ...inboundForm, reservation_id: "", size: "medium" });
+    setInboundForm({ ...inboundForm, reservation_id: "", size: prevInboundSize });
   };
 
   const reserveAvailHint = () => {

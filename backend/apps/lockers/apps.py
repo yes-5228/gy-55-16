@@ -1,7 +1,10 @@
+import logging
 import threading
 import time
 
 from django.apps import AppConfig
+
+logger = logging.getLogger(__name__)
 
 
 class LockersConfig(AppConfig):
@@ -21,10 +24,12 @@ class LockersConfig(AppConfig):
             time.sleep(10)
             while True:
                 try:
-                    clean_expired_reservations()
-                except Exception:
-                    pass
-                time.sleep(300)
+                    count = clean_expired_reservations()
+                    if count > 0:
+                        logger.info("自动清理过期预约 %d 个", count)
+                except Exception as exc:
+                    logger.exception("清理过期预约时发生异常: %s", exc)
+                time.sleep(30)
 
         t = threading.Thread(target=cleanup_worker, daemon=True, name="reservation-cleanup")
         t.start()
