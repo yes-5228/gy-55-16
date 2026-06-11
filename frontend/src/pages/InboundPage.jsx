@@ -42,11 +42,14 @@ export default function InboundPage() {
   const [zones, setZones] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [availCount, setAvailCount] = useState(null);
-  const [availLoading, setAvailLoading] = useState(false);
+  const [reserveAvailCount, setReserveAvailCount] = useState(null);
+  const [reserveAvailLoading, setReserveAvailLoading] = useState(false);
+  const [inboundAvailCount, setInboundAvailCount] = useState(null);
+  const [inboundAvailLoading, setInboundAvailLoading] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [submittingReserve, setSubmittingReserve] = useState(false);
   const [submittingInbound, setSubmittingInbound] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const messageAnchorRef = useRef(null);
 
@@ -62,27 +65,53 @@ export default function InboundPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setAvailLoading(true);
+    setReserveAvailLoading(true);
     const params = { size: reservationForm.size };
     if (reservationForm.zone) params.zone = reservationForm.zone;
     lockersApi
       .availability(params)
       .then((cells) => {
         if (!cancelled) {
-          setAvailCount(cells.length);
-          setAvailLoading(false);
+          setReserveAvailCount(cells.length);
+          setReserveAvailLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setAvailCount(null);
-          setAvailLoading(false);
+          setReserveAvailCount(null);
+          setReserveAvailLoading(false);
         }
       });
     return () => {
       cancelled = true;
     };
   }, [reservationForm.size, reservationForm.zone]);
+
+  useEffect(() => {
+    if (tab !== "inbound" || inboundForm.reservation_id) {
+      setInboundAvailCount(null);
+      return;
+    }
+    let cancelled = false;
+    setInboundAvailLoading(true);
+    lockersApi
+      .availability({ size: inboundForm.size })
+      .then((cells) => {
+        if (!cancelled) {
+          setInboundAvailCount(cells.length);
+          setInboundAvailLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInboundAvailCount(null);
+          setInboundAvailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inboundForm.size, tab, inboundForm.reservation_id]);
 
   const updateInbound = (event) => {
     setInboundForm({ ...inboundForm, [event.target.name]: event.target.value });
@@ -121,7 +150,7 @@ export default function InboundPage() {
     event.preventDefault();
     if (submittingReserve) return;
     clearMsg();
-    if (availCount === 0) {
+    if (reserveAvailCount === 0) {
       showError("当前条件下没有可用空柜，请更换尺寸或分区后再试。");
       return;
     }
@@ -146,13 +175,18 @@ export default function InboundPage() {
 
   const doCancel = async () => {
     const id = confirming;
-    setConfirming(null);
+    if (cancelling) return;
+    setCancelling(true);
     try {
       await reservationsApi.cancel(id);
+      setConfirming(null);
       showMessage("预约已取消。");
       loadReservations();
     } catch (err) {
+      setConfirming(null);
       showError(err.message);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -169,6 +203,10 @@ export default function InboundPage() {
     event.preventDefault();
     if (submittingInbound) return;
     clearMsg();
+    if (!inboundForm.reservation_id && inboundAvailCount === 0) {
+      showError("当前所选尺寸没有可用空柜，请更换尺寸或先预约柜格。");
+      return;
+    }
     setSubmittingInbound(true);
     try {
       const payload = { ...inboundForm };
@@ -190,10 +228,10 @@ export default function InboundPage() {
     setInboundForm({ ...inboundForm, reservation_id: "", size: "medium" });
   };
 
-  const availHint = () => {
-    if (availLoading) return { type: "info", text: "正在查询空柜..." };
-    if (availCount === null) return null;
-    if (availCount === 0) {
+  const reserveAvailHint = () => {
+    if (reserveAvailLoading) return { type: "info", text: "正在查询空柜..." };
+    if (reserveAvailCount === null) return null;
+    if (reserveAvailCount === 0) {
       return {
         type: "error",
         text: `当前条件下（${reservationForm.size === "small" ? "小" : reservationForm.size === "medium" ? "中" : "大"}柜${reservationForm.zone ? ` · ${reservationForm.zone}` : ""}）没有可用空柜，请更换尺寸或分区。`,
@@ -201,7 +239,23 @@ export default function InboundPage() {
     }
     return {
       type: "success",
-      text: `当前条件下（${reservationForm.size === "small" ? "小" : reservationForm.size === "medium" ? "中" : "大"}柜${reservationForm.zone ? ` · ${reservationForm.zone}` : ""}）还有 ${availCount} 个空柜可预约。`,
+      text: `当前条件下（${reservationForm.size === "small" ? "小" : reservationForm.size === "medium" ? "中" : "大"}柜${reservationForm.zone ? ` · ${reservationForm.zone}` : ""}）还有 ${reserveAvailCount} 个空柜可预约。`,
+    };
+  };
+
+  const inboundAvailHint = () => {
+    if (inboundForm.reservation_id) return null;
+    if (inboundAvailLoading) return { type: "info", text: "正在查询空柜..." };
+    if (inboundAvailCount === null) return null;
+    if (inboundAvailCount === 0) {
+      return {
+        type: "error",
+        text: `当前所选${inboundForm.size === "small" ? "小" : inboundForm.size === "medium" ? "中" : "大"}柜没有可用空柜，请更换尺寸或先预约柜格。`,
+      };
+    }
+    return {
+      type: "success",
+      text: `当前所选${inboundForm.size === "small" ? "小" : inboundForm.size === "medium" ? "中" : "大"}柜还有 ${inboundAvailCount} 个空柜可用。`,
     };
   };
 
@@ -226,14 +280,22 @@ export default function InboundPage() {
           <div className="modal-box">
             <div className="modal-head">
               <h3><AlertTriangle size={20} /> 确认操作</h3>
-              <button className="icon-btn" onClick={() => setConfirming(null)}><X size={18} /></button>
+              <button className="icon-btn" onClick={() => !cancelling && setConfirming(null)} disabled={cancelling}>
+                <X size={18} />
+              </button>
             </div>
             <div className="modal-body">
               <p>确认取消此预约吗？取消后柜格将被释放，操作不可撤销。</p>
             </div>
             <div className="modal-actions">
-              <button className="ghost" onClick={() => setConfirming(null)}>取消</button>
-              <button className="danger-btn" onClick={doCancel}>确认取消</button>
+              <button className="ghost" onClick={() => setConfirming(null)} disabled={cancelling}>取消</button>
+              <button className="danger-btn" onClick={doCancel} disabled={cancelling}>
+                {cancelling ? (
+                  <><Loader2 size={16} className="spin" />处理中...</>
+                ) : (
+                  <>确认取消</>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -263,7 +325,7 @@ export default function InboundPage() {
               </select>
             </label>
             {(() => {
-              const h = availHint();
+              const h = reserveAvailHint();
               if (!h) return null;
               return (
                 <div className={`hint ${h.type}`}>
@@ -277,11 +339,11 @@ export default function InboundPage() {
               <input type="number" name="expire_hours" min={1} max={72} value={reservationForm.expire_hours} onChange={updateReservation} required />
             </label>
             <label>备注<input name="note" value={reservationForm.note} onChange={updateReservation} /></label>
-            <button type="submit" disabled={availCount === 0 || submittingReserve}>
+            <button type="submit" disabled={reserveAvailCount === 0 || submittingReserve}>
               {submittingReserve ? (
                 <><Loader2 size={18} className="spin" />处理中...</>
               ) : (
-                <><CalendarCheck size={18} />{availCount === 0 ? "暂无可预约柜格" : "锁定柜格"}</>
+                <><CalendarCheck size={18} />{reserveAvailCount === 0 ? "暂无可预约柜格" : "锁定柜格"}</>
               )}
             </button>
           </form>
@@ -352,12 +414,22 @@ export default function InboundPage() {
                 </select>
               </label>
             )}
+            {(() => {
+              const h = inboundAvailHint();
+              if (!h) return null;
+              return (
+                <div className={`hint ${h.type}`}>
+                  {h.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                  <span>{h.text}</span>
+                </div>
+              );
+            })()}
             <label>备注<input name="note" value={inboundForm.note} onChange={updateInbound} /></label>
-            <button type="submit" disabled={submittingInbound}>
+            <button type="submit" disabled={submittingInbound || (!inboundForm.reservation_id && inboundAvailCount === 0)}>
               {submittingInbound ? (
                 <><Loader2 size={18} className="spin" />处理中...</>
               ) : (
-                <><PackagePlus size={18} />确认入库</>
+                <><PackagePlus size={18} />{!inboundForm.reservation_id && inboundAvailCount === 0 ? "暂无可入库柜格" : "确认入库"}</>
               )}
             </button>
           </form>

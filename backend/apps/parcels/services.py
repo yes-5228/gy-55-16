@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.lockers.models import LockerCell, Reservation
+from apps.lockers.services import clean_expired_reservations
 from apps.notifications.services import send_pickup_notification
 from .models import Parcel
 
@@ -22,6 +23,7 @@ def generate_pickup_code():
 
 @transaction.atomic
 def inbound_parcel(validated_data):
+    clean_expired_reservations()
     size = validated_data.pop("size", None)
     reservation_id = validated_data.pop("reservation_id", None)
 

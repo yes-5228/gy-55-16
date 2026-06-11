@@ -12,14 +12,20 @@ from .serializers import (
     ReservationCreateSerializer,
     ReservationSerializer,
 )
+from .services import clean_expired_reservations
 
 
 class LockerCellViewSet(viewsets.ModelViewSet):
     queryset = LockerCell.objects.all()
     serializer_class = LockerCellSerializer
 
+    def list(self, request, *args, **kwargs):
+        clean_expired_reservations()
+        return super().list(request, *args, **kwargs)
+
     @action(detail=False, methods=["get"])
     def summary(self, request):
+        clean_expired_reservations()
         total = LockerCell.objects.count()
         by_status = {
             item["status"]: item["count"]
@@ -45,6 +51,7 @@ class LockerCellViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def availability(self, request):
+        clean_expired_reservations()
         size = request.query_params.get("size")
         zone = request.query_params.get("zone")
         cells = LockerCell.objects.filter(status=LockerCell.Status.EMPTY)
@@ -80,8 +87,13 @@ class ReservationViewSet(viewsets.ModelViewSet):
             return ReservationCreateSerializer
         return ReservationSerializer
 
+    def list(self, request, *args, **kwargs):
+        clean_expired_reservations()
+        return super().list(request, *args, **kwargs)
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        clean_expired_reservations()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -114,25 +126,14 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def active(self, request):
-        now = timezone.now()
-        expired_qs = Reservation.objects.filter(
-            status=Reservation.Status.ACTIVE,
-            expires_at__lt=now,
-        )
-        for r in expired_qs:
-            with transaction.atomic():
-                r.status = Reservation.Status.EXPIRED
-                r.save(update_fields=["status"])
-                cell = r.locker_cell
-                if cell.status == LockerCell.Status.RESERVED:
-                    cell.status = LockerCell.Status.EMPTY
-                    cell.save(update_fields=["status", "updated_at"])
+        clean_expired_reservations()
         qs = Reservation.objects.filter(status=Reservation.Status.ACTIVE).select_related("locker_cell")
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
+        clean_expired_reservations()
         with transaction.atomic():
             reservation = self.get_object()
             if reservation.status != Reservation.Status.ACTIVE:
