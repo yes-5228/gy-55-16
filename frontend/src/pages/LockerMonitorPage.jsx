@@ -47,6 +47,7 @@ export default function LockerMonitorPage() {
       />
       <div className="metric-grid compact">
         <MetricCard title="空闲" value={summary?.empty ?? 0} />
+        <MetricCard title="已预约" value={summary?.reserved ?? 0} />
         <MetricCard title="已占用" value={summary?.occupied ?? 0} />
         <MetricCard title="已开门" value={summary?.open ?? 0} />
         <MetricCard title="维护中" value={summary?.maintenance ?? 0} />

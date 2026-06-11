@@ -126,7 +126,31 @@ button.danger {
 }
 
 .metric-grid.compact {
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.tabs button {
+  background: #eef3f2;
+  color: #475467;
+  border: 1px solid #d7e2df;
+  padding: 9px 16px;
+}
+
+.tabs button:hover {
+  background: #e0ebe8;
+}
+
+.tabs button.active {
+  background: #1f6f68;
+  color: #fff;
+  border-color: #1f6f68;
 }
 
 .metric-card,
@@ -286,6 +310,37 @@ th {
 .badge.gray {
   background: #eef2f6;
   color: #475467;
+}
+
+.badge.purple {
+  background: #f3eaff;
+  color: #6c2bd9;
+}
+
+.hint {
+  background: #e8f1ff;
+  color: #175cd3;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: #175cd3;
+  padding: 0;
+  min-height: 0;
+  text-decoration: underline;
+}
+
+button.link:hover {
+  background: none;
+  color: #124cb0;
 }
 
 .message {

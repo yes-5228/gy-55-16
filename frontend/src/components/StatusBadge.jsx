@@ -2,6 +2,7 @@ import React from "react";
 
 const statusMap = {
   empty: "green",
+  reserved: "purple",
   occupied: "amber",
   open: "blue",
   maintenance: "red",
@@ -13,6 +14,10 @@ const statusMap = {
   completed: "green",
   sent: "green",
   failed: "red",
+  active: "green",
+  used: "blue",
+  cancelled: "gray",
+  expired: "red",
 };
 
 export default function StatusBadge({ status, label }) {
