@@ -1,4 +1,4 @@
-import { CalendarCheck, PackagePlus, RefreshCw, X } from "lucide-react";
+import { CalendarCheck, PackagePlus, RefreshCw, X, AlertTriangle, CheckCircle2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { parcelsApi, reservationsApi, lockersApi } from "../api/modules";
@@ -42,6 +42,9 @@ export default function InboundPage() {
   const [zones, setZones] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [availCount, setAvailCount] = useState(null);
+  const [availLoading, setAvailLoading] = useState(false);
+  const [confirming, setConfirming] = useState(null);
 
   const loadParcels = () => parcelsApi.list().then(setParcels);
   const loadReservations = () => reservationsApi.active().then(setReservations);
@@ -52,6 +55,30 @@ export default function InboundPage() {
     loadReservations();
     loadZones();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAvailLoading(true);
+    const params = { size: reservationForm.size };
+    if (reservationForm.zone) params.zone = reservationForm.zone;
+    lockersApi
+      .availability(params)
+      .then((cells) => {
+        if (!cancelled) {
+          setAvailCount(cells.length);
+          setAvailLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAvailCount(null);
+          setAvailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reservationForm.size, reservationForm.zone]);
 
   const updateInbound = (event) => {
     setInboundForm({ ...inboundForm, [event.target.name]: event.target.value });
@@ -69,6 +96,10 @@ export default function InboundPage() {
   const submitReservation = async (event) => {
     event.preventDefault();
     clearMsg();
+    if (availCount === 0) {
+      setError("当前条件下没有可用空柜，请更换尺寸或分区后再试。");
+      return;
+    }
     try {
       const payload = { ...reservationForm };
       if (!payload.zone) delete payload.zone;
@@ -81,7 +112,13 @@ export default function InboundPage() {
     }
   };
 
-  const cancelReservation = async (id) => {
+  const confirmCancel = (id) => {
+    setConfirming(id);
+  };
+
+  const doCancel = async () => {
+    const id = confirming;
+    setConfirming(null);
     clearMsg();
     try {
       await reservationsApi.cancel(id);
@@ -122,6 +159,21 @@ export default function InboundPage() {
     setInboundForm({ ...inboundForm, reservation_id: "", size: "medium" });
   };
 
+  const availHint = () => {
+    if (availLoading) return { type: "info", text: "正在查询空柜..." };
+    if (availCount === null) return null;
+    if (availCount === 0) {
+      return {
+        type: "error",
+        text: `当前条件下（${reservationForm.size === "small" ? "小" : reservationForm.size === "medium" ? "中" : "大"}柜${reservationForm.zone ? ` · ${reservationForm.zone}` : ""}）没有可用空柜，请更换尺寸或分区。`,
+      };
+    }
+    return {
+      type: "success",
+      text: `当前条件下（${reservationForm.size === "small" ? "小" : reservationForm.size === "medium" ? "中" : "大"}柜${reservationForm.zone ? ` · ${reservationForm.zone}` : ""}）还有 ${availCount} 个空柜可预约。`,
+    };
+  };
+
   return (
     <>
       <PageHeader title="快件入库" description="提前预约柜格锁定空柜，到货时使用预约快速入柜。" />
@@ -159,18 +211,41 @@ export default function InboundPage() {
                 ))}
               </select>
             </label>
+            {(() => {
+              const h = availHint();
+              if (!h) return null;
+              return (
+                <div className={`hint ${h.type}`}>
+                  {h.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                  <span>{h.text}</span>
+                </div>
+              );
+            })()}
             <label>
               有效期（小时）
               <input type="number" name="expire_hours" min={1} max={72} value={reservationForm.expire_hours} onChange={updateReservation} required />
             </label>
             <label>备注<input name="note" value={reservationForm.note} onChange={updateReservation} /></label>
-            <button type="submit"><CalendarCheck size={18} />锁定柜格</button>
+            <button type="submit" disabled={availCount === 0}>
+              <CalendarCheck size={18} />{availCount === 0 ? "暂无可预约柜格" : "锁定柜格"}
+            </button>
           </form>
           <section className="panel">
             <div className="panel-title">
               <h2>有效预约列表</h2>
               <button className="ghost" onClick={() => { loadReservations(); clearMsg(); }}><RefreshCw size={16} />刷新</button>
             </div>
+            {confirming && (
+              <div className="confirm-dialog">
+                <div className="confirm-box">
+                  <p><AlertTriangle size={20} /> 确认取消此预约吗？取消后柜格将被释放，操作不可撤销。</p>
+                  <div className="confirm-actions">
+                    <button className="ghost" onClick={() => setConfirming(null)}>取消</button>
+                    <button className="danger-btn" onClick={doCancel}>确认取消</button>
+                  </div>
+                </div>
+              </div>
+            )}
             <DataTable
               rows={reservations}
               columns={[
@@ -187,7 +262,7 @@ export default function InboundPage() {
                   render: (row) => (
                     <div className="row-actions">
                       <button className="ghost" onClick={() => useReservation(row)}><PackagePlus size={15} />使用入库</button>
-                      <button className="ghost danger" onClick={() => cancelReservation(row.id)}><X size={15} />取消</button>
+                      <button className="ghost danger" onClick={() => confirmCancel(row.id)}><X size={15} />取消</button>
                     </div>
                   ),
                 },

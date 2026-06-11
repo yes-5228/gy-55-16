@@ -329,6 +329,21 @@ th {
   flex-wrap: wrap;
 }
 
+.hint.success {
+  background: #e8f5ee;
+  color: #087443;
+}
+
+.hint.error {
+  background: #fff0ed;
+  color: #b42318;
+}
+
+.hint.info {
+  background: #e8f1ff;
+  color: #175cd3;
+}
+
 button.link {
   background: none;
   border: none;
@@ -383,6 +398,52 @@ button.link:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+button:disabled {
+  background: #9aa5b1;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  background: #9aa5b1;
+}
+
+button.danger-btn {
+  background: #b42318;
+  color: white;
+  border: none;
+}
+
+button.danger-btn:hover {
+  background: #901c13;
+}
+
+.confirm-dialog {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.confirm-box {
+  background: #fff7ed;
+  border: 1px solid #f5c9a1;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.confirm-box p {
+  margin: 0 0 12px;
+  color: #93370d;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 980px) {
