@@ -1,5 +1,5 @@
-import { CalendarCheck, PackagePlus, RefreshCw, X, AlertTriangle, CheckCircle2 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { CalendarCheck, PackagePlus, RefreshCw, X, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { parcelsApi, reservationsApi, lockersApi } from "../api/modules";
 import DataTable from "../components/DataTable";
@@ -45,6 +45,10 @@ export default function InboundPage() {
   const [availCount, setAvailCount] = useState(null);
   const [availLoading, setAvailLoading] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [submittingReserve, setSubmittingReserve] = useState(false);
+  const [submittingInbound, setSubmittingInbound] = useState(false);
+
+  const messageAnchorRef = useRef(null);
 
   const loadParcels = () => parcelsApi.list().then(setParcels);
   const loadReservations = () => reservationsApi.active().then(setReservations);
@@ -88,6 +92,26 @@ export default function InboundPage() {
     setReservationForm({ ...reservationForm, [event.target.name]: event.target.value });
   };
 
+  const scrollToMessage = () => {
+    requestAnimationFrame(() => {
+      if (messageAnchorRef.current) {
+        messageAnchorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  };
+
+  const showMessage = (text) => {
+    setError("");
+    setMessage(text);
+    scrollToMessage();
+  };
+
+  const showError = (text) => {
+    setMessage("");
+    setError(text);
+    scrollToMessage();
+  };
+
   const clearMsg = () => {
     setMessage("");
     setError("");
@@ -95,20 +119,24 @@ export default function InboundPage() {
 
   const submitReservation = async (event) => {
     event.preventDefault();
+    if (submittingReserve) return;
     clearMsg();
     if (availCount === 0) {
-      setError("当前条件下没有可用空柜，请更换尺寸或分区后再试。");
+      showError("当前条件下没有可用空柜，请更换尺寸或分区后再试。");
       return;
     }
+    setSubmittingReserve(true);
     try {
       const payload = { ...reservationForm };
       if (!payload.zone) delete payload.zone;
       const created = await reservationsApi.create(payload);
-      setMessage(`预约成功，柜格 ${created.locker_cell_detail.code}，有效期至 ${formatDateTime(created.expires_at)}。`);
+      showMessage(`预约成功，柜格 ${created.locker_cell_detail.code}，有效期至 ${formatDateTime(created.expires_at)}。`);
       setReservationForm(initialReservation);
       loadReservations();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setSubmittingReserve(false);
     }
   };
 
@@ -119,13 +147,12 @@ export default function InboundPage() {
   const doCancel = async () => {
     const id = confirming;
     setConfirming(null);
-    clearMsg();
     try {
       await reservationsApi.cancel(id);
-      setMessage("预约已取消。");
+      showMessage("预约已取消。");
       loadReservations();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
     }
   };
 
@@ -140,18 +167,22 @@ export default function InboundPage() {
 
   const submitInbound = async (event) => {
     event.preventDefault();
+    if (submittingInbound) return;
     clearMsg();
+    setSubmittingInbound(true);
     try {
       const payload = { ...inboundForm };
       if (!payload.reservation_id) delete payload.reservation_id;
       else payload.reservation_id = Number(payload.reservation_id);
       const created = await parcelsApi.inbound(payload);
-      setMessage(`入库成功，柜格 ${created.locker_cell_detail.code}，取件码 ${created.pickup_code}。`);
+      showMessage(`入库成功，柜格 ${created.locker_cell_detail.code}，取件码 ${created.pickup_code}。`);
       setInboundForm(initialInbound);
       loadParcels();
       loadReservations();
     } catch (err) {
-      setError(err.message);
+      showError(err.message);
+    } finally {
+      setSubmittingInbound(false);
     }
   };
 
@@ -185,8 +216,28 @@ export default function InboundPage() {
           <PackagePlus size={16} />快件入库
         </button>
       </div>
-      <MessageBox type="success">{message}</MessageBox>
-      <MessageBox type="error">{error}</MessageBox>
+      <div ref={messageAnchorRef}>
+        <MessageBox type="success">{message}</MessageBox>
+        <MessageBox type="error">{error}</MessageBox>
+      </div>
+
+      {confirming && (
+        <div className="modal-mask">
+          <div className="modal-box">
+            <div className="modal-head">
+              <h3><AlertTriangle size={20} /> 确认操作</h3>
+              <button className="icon-btn" onClick={() => setConfirming(null)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <p>确认取消此预约吗？取消后柜格将被释放，操作不可撤销。</p>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost" onClick={() => setConfirming(null)}>取消</button>
+              <button className="danger-btn" onClick={doCancel}>确认取消</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === "reservation" && (
         <section className="work-grid">
@@ -226,8 +277,12 @@ export default function InboundPage() {
               <input type="number" name="expire_hours" min={1} max={72} value={reservationForm.expire_hours} onChange={updateReservation} required />
             </label>
             <label>备注<input name="note" value={reservationForm.note} onChange={updateReservation} /></label>
-            <button type="submit" disabled={availCount === 0}>
-              <CalendarCheck size={18} />{availCount === 0 ? "暂无可预约柜格" : "锁定柜格"}
+            <button type="submit" disabled={availCount === 0 || submittingReserve}>
+              {submittingReserve ? (
+                <><Loader2 size={18} className="spin" />处理中...</>
+              ) : (
+                <><CalendarCheck size={18} />{availCount === 0 ? "暂无可预约柜格" : "锁定柜格"}</>
+              )}
             </button>
           </form>
           <section className="panel">
@@ -235,17 +290,6 @@ export default function InboundPage() {
               <h2>有效预约列表</h2>
               <button className="ghost" onClick={() => { loadReservations(); clearMsg(); }}><RefreshCw size={16} />刷新</button>
             </div>
-            {confirming && (
-              <div className="confirm-dialog">
-                <div className="confirm-box">
-                  <p><AlertTriangle size={20} /> 确认取消此预约吗？取消后柜格将被释放，操作不可撤销。</p>
-                  <div className="confirm-actions">
-                    <button className="ghost" onClick={() => setConfirming(null)}>取消</button>
-                    <button className="danger-btn" onClick={doCancel}>确认取消</button>
-                  </div>
-                </div>
-              </div>
-            )}
             <DataTable
               rows={reservations}
               columns={[
@@ -309,7 +353,13 @@ export default function InboundPage() {
               </label>
             )}
             <label>备注<input name="note" value={inboundForm.note} onChange={updateInbound} /></label>
-            <button type="submit"><PackagePlus size={18} />确认入库</button>
+            <button type="submit" disabled={submittingInbound}>
+              {submittingInbound ? (
+                <><Loader2 size={18} className="spin" />处理中...</>
+              ) : (
+                <><PackagePlus size={18} />确认入库</>
+              )}
+            </button>
           </form>
           <section className="panel">
             <div className="panel-title">
